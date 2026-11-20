@@ -34,27 +34,28 @@ impl Render for Unescape<'_> {
     }
 }
 
+/// The row reader of the first argument.
 pub(crate) fn unary<'a, A: WithReader + 'a>(args: &'a VectorCollection) -> Result<A::Reader<'a>> {
     args.get_vector_at::<A>(0)?.row_reader()
 }
 
+/// The row readers of the first two arguments.
 pub(crate) fn binary<'a, A: WithReader + 'a, B: WithReader + 'a>(
     args: &'a VectorCollection,
 ) -> Result<(A::Reader<'a>, B::Reader<'a>)> {
-    Ok((
-        args.get_vector_at::<A>(0)?.row_reader()?,
-        args.get_vector_at::<B>(1)?.row_reader()?,
-    ))
+    let a = args.get_vector_at::<A>(0)?.row_reader()?;
+    let b = args.get_vector_at::<B>(1)?.row_reader()?;
+    if a.len() != b.len() {
+        return Err(Error::invalid_input("argument vectors differ in length"));
+    }
+    Ok((a, b))
 }
 
-pub(crate) fn zip<'a, A: RowReader, B: RowReader>(
-    a: &'a A,
-    b: &'a B,
-) -> Result<impl ExactSizeIterator<Item = Option<(A::Item<'a>, B::Item<'a>)>>> {
-    if a.len() != b.len() {
-        return Err(Error::invalid_input("argument row counts differ"));
-    }
-    Ok(a.iter().zip(b.iter()).map(|(a, b)| a.zip(b)))
+/// The rows of two readers, `None` where either is NULL.
+pub(crate) fn zip<'r, A: RowReader, B: RowReader>(
+    (a, b): &'r (A, B),
+) -> impl ExactSizeIterator<Item = Option<(A::Item<'r>, B::Item<'r>)>> {
+    a.iter().zip(b.iter()).map(|(a, b)| a.zip(b))
 }
 
 /// Write `f` of every non-NULL row; `f` returns `None` for a NULL result.
@@ -65,7 +66,7 @@ pub(crate) fn write_values<In, T>(
 ) -> Result<()>
 where
     T: WithWriter,
-    for<'a> T::Writer<'a>: RowWriter<Value = T>,
+    for<'w> T::Writer<'w>: RowWriter<Value = T>,
 {
     output.set_size(rows.len())?;
     let mut writer = output.row_writer()?;

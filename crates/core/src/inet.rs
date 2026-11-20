@@ -115,7 +115,7 @@ impl CastFunctionCallbacks for ParseInet {
         input: Vector<'_, String>,
         output: Vector<'_, InetStorage>,
     ) -> Result<()> {
-        let input = input.reader()?;
+        let input = input.row_reader()?;
         rows::write_values(output, input.iter(), |text| {
             try_row(
                 mode,
